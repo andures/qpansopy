@@ -1,6 +1,6 @@
 from PyQt5 import QtGui, QtWidgets, uic
 from PyQt5.QtCore import pyqtSignal, Qt
-from qgis.core import QgsMapLayerProxyModel
+from qgis.core import QgsMapLayerProxyModel, QgsVectorLayer, QgsWkbTypes
 import os
 import datetime
 
@@ -17,6 +17,8 @@ class QPANSOPYCONVInitialDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         # Setup layer combobox
         self.routingLayerComboBox.setFilters(QgsMapLayerProxyModel.LineLayer)
+        self._sync_active_routing_layer(self.iface.activeLayer())
+        self.iface.currentLayerChanged.connect(self._on_current_layer_changed)
         
         # Set default output folder
         self.outputFolderLineEdit.setText(self.get_desktop_path())
@@ -37,6 +39,10 @@ class QPANSOPYCONVInitialDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.mocUnitComboBox.setCurrentText("ft")
 
     def closeEvent(self, event):
+        try:
+            self.iface.currentLayerChanged.disconnect(self._on_current_layer_changed)
+        except TypeError:
+            pass
         self.closingPlugin.emit()
         event.accept()
 
@@ -104,3 +110,20 @@ class QPANSOPYCONVInitialDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.log(f"Error during calculation: {str(e)}")
             import traceback
             self.log(traceback.format_exc())
+
+
+    def _on_current_layer_changed(self, layer):
+        """Automatically update routing layer when user switches active layer."""
+        self._sync_active_routing_layer(layer)
+
+    def _sync_active_routing_layer(self, layer):
+        """Select active layer if it is a line vector layer."""
+        if self._is_line_layer(layer):
+            self.routingLayerComboBox.setLayer(layer)
+
+    @staticmethod
+    def _is_line_layer(layer):
+        return (
+            isinstance(layer, QgsVectorLayer)
+            and layer.geometryType() == QgsWkbTypes.LineGeometry
+        )
