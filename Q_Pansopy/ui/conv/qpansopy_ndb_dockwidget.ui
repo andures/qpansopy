@@ -2,10 +2,6 @@
 <ui version="4.0">
  <class>QPANSOPYNDBDockWidget</class>
  <widget class="QDockWidget" name="QPANSOPYNDBDockWidget">
-    <property name="minimumSize">
-     <size>
-        <width>0</width>
-        <height>0</height>
   <property name="minimumSize">
    <size>
     <width>250</width>
