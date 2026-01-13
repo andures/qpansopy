@@ -1,6 +1,6 @@
 from PyQt5 import QtGui, QtWidgets, uic
 from PyQt5.QtCore import pyqtSignal, Qt
-from qgis.core import QgsMapLayerProxyModel
+from qgis.core import QgsMapLayerProxyModel, QgsProject, QgsWkbTypes
 import os
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -18,6 +18,14 @@ class QPANSOPYGNSSWaypointDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         # Setup layer comboboxes
         self.waypointLayerComboBox.setFilters(QgsMapLayerProxyModel.PointLayer)
         self.routingLayerComboBox.setFilters(QgsMapLayerProxyModel.LineLayer)
+        self._refresh_routing_layers_visible()
+        self._prefill_routing_with_active_layer()
+        try:
+            QgsProject.instance().layerTreeRoot().visibilityChanged.connect(
+                self._refresh_routing_layers_visible
+            )
+        except Exception:
+            pass
         
         # Set default output folder
         self.outputFolderLineEdit.setText(self.get_desktop_path())
@@ -33,6 +41,63 @@ class QPANSOPYGNSSWaypointDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def closeEvent(self, event):
         self.closingPlugin.emit()
         event.accept()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Refresh defaults and visibility-filtered list
+        self._refresh_routing_layers_visible()
+        self._prefill_routing_with_active_layer()
+
+    def _prefill_routing_with_active_layer(self):
+        """If active layer is a visible line, preselect it—only when current is missing."""
+        try:
+            current = self.routingLayerComboBox.currentLayer()
+            if current and QgsProject.instance().mapLayer(current.id()):
+                node = QgsProject.instance().layerTreeRoot().findLayer(current.id())
+                if node and node.isVisible():
+                    return  # keep user's current valid visible selection
+
+            active = self.iface.activeLayer()
+            if not active or not hasattr(active, "geometryType"):
+                return
+            if active.geometryType() != QgsWkbTypes.LineGeometry:
+                return
+            node = QgsProject.instance().layerTreeRoot().findLayer(active.id())
+            if node and not node.isVisible():
+                return
+            self.routingLayerComboBox.setLayer(active)
+        except Exception:
+            pass
+
+    def _refresh_routing_layers_visible(self):
+        """Limit routing combo to visible line layers only."""
+        try:
+            project = QgsProject.instance()
+            root = project.layerTreeRoot()
+            if not root:
+                return
+            visible_lines = []
+            for layer in project.mapLayers().values():
+                try:
+                    if not hasattr(layer, "geometryType"):
+                        continue
+                    if layer.geometryType() != QgsWkbTypes.LineGeometry:
+                        continue
+                    node = root.findLayer(layer.id())
+                    if node and node.isVisible():
+                        visible_lines.append(layer)
+                except Exception:
+                    continue
+            # Exclude all non-visible layers from the combo
+            excepted = [l for l in project.mapLayers().values() if l not in visible_lines]
+            self.routingLayerComboBox.setExceptedLayerList(excepted)
+
+            # If current selection became invisible, try to refill
+            current = self.routingLayerComboBox.currentLayer()
+            if current and current not in visible_lines:
+                self._prefill_routing_with_active_layer()
+        except Exception:
+            pass
 
     def get_desktop_path(self):
         if os.name == 'nt':

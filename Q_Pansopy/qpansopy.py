@@ -330,10 +330,7 @@ class Qpansopy:
             if dock_widget_cls is None:
                 run_cb = self.modules[name].get("RUN_ACTION")
                 if callable(run_cb):
-                    try:
-                        run_cb()
-                    finally:
-                        return
+                    run_cb()
                 return
             instance = self.modules[name]["GUI_INSTANCE"] = dock_widget_cls(self.iface)
             title = self.modules[name].get("TITLE", name)
